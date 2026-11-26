@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#13242e">
+<title>NJ Rebate Lookup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+/* VOICE: field tool, plain and fast, readable in a parking lot on a phone
+   IDEA: a survey map legend — a search bar on top, each building a plotted parcel card
+   PICTURE: the live results list itself, building cards with a lighting status stamp
+   COLOUR and TYPE: survey map card — land, ink, contour brown, route magenta; Overpass
+   LAYOUT: sticky search band, one column of cards, max 760px */
+:root{color-scheme:light dark;
+--bg:light-dark(#fbfbf2,#0d1c24);--ink:light-dark(#13242e,#e6eef0);--mute:light-dark(#4f6470,#9fb3bb);
+--card:light-dark(#ffffff,#13262f);--line:light-dark(#dcdccd,#24404b);--sea:light-dark(#bfe3ee,#123844);
+--brown:light-dark(#a8551b,#e0965c);--mag:light-dark(#d6127e,#ff5fb0);--magbg:light-dark(#fde7f2,#3a1229)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Overpass,system-ui,sans-serif;overflow-x:clip}
+.wrap{max-width:760px;margin:0 auto;padding:0 16px}
+header{position:sticky;top:0;z-index:5;background:var(--sea);border-bottom:2px solid var(--brown);padding:12px 0 10px}
+h1{margin:0 0 8px;font-size:20px;font-weight:800;line-height:1.1;letter-spacing:-.01em}
+h1 small{font-weight:400;color:var(--mute);font-size:13px;margin-left:6px}
+.sbox{display:flex;gap:8px}
+input[type=search]{flex:1;font:inherit;font-size:17px;padding:11px 14px;min-height:48px;border:2px solid var(--ink);border-radius:10px;background:var(--card);color:var(--ink)}
+input[type=search]:focus{outline:3px solid var(--mag);outline-offset:1px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px;font-size:14px}
+.chip{font:inherit;font-size:14px;font-weight:600;min-height:40px;padding:0 14px;border-radius:20px;border:2px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer}
+.chip[aria-pressed=true]{background:var(--ink);color:var(--bg)}
+.chip:focus-visible,button:focus-visible,a:focus-visible{outline:3px solid var(--mag);outline-offset:2px}
+#count{color:var(--mute);margin-left:auto}
+main{padding:14px 0 40px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:0 0 12px;overflow:hidden}
+.card>summary{list-style:none;cursor:pointer;padding:14px 16px;display:grid;gap:4px}
+.card>summary::-webkit-details-marker{display:none}
+.addr{font-weight:800;font-size:18px;line-height:1.2}
+.city{color:var(--mute);font-size:14px}
+.co{font-size:15px}
+.stamp{justify-self:start;margin-top:4px;font-size:13px;font-weight:700;padding:3px 10px;border-radius:6px;border:1.5px solid var(--mute);color:var(--mute)}
+.stamp.lit{border-color:var(--mag);color:var(--mag);background:var(--magbg)}
+.meta{font-size:13px;color:var(--mute)}
+.meta b{color:var(--ink)}
+.list{border-top:1px dashed var(--line);padding:4px 16px 12px}
+.it{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.it:last-of-type{border-bottom:0}
+.it .t{font-weight:600}
+.it .t.l{color:var(--mag)}
+.it .a{text-align:right;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+.it .s{grid-column:1/-1;font-size:13px;color:var(--mute)}
+.maps{display:inline-flex;align-items:center;min-height:44px;font-weight:700;color:var(--brown)}
+.more{display:block;width:100%;font:inherit;font-weight:700;min-height:48px;border-radius:10px;border:2px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer}
+.empty{padding:10px 2px;color:var(--mute)}
+.empty h2{color:var(--ink);font-size:18px;margin:0 0 6px}
+.empty ul{padding-left:20px;margin:6px 0 14px}
+.src{font-size:13px;color:var(--mute);border-top:1px solid var(--line);padding-top:12px;margin-top:20px}
+mark{background:none;color:inherit;text-decoration:underline 2px var(--mag);text-underline-offset:2px}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <h1>NJ rebate lookup <small id="asof">Loading data…</small></h1>
+  <form class="sbox" id="f" role="search">
+    <label for="q" style="position:absolute;left:-9999px">Search address, business, city or ZIP</label>
+    <input id="q" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" placeholder="Address, business, city or ZIP" disabled>
+  </form>
+  <div class="row">
+    <button type="button" class="chip" id="lit" aria-pressed="false">Lighting only</button>
+    <span id="count"></span>
+  </div>
+</div></header>
+<main class="wrap" id="out"><p class="empty">Loading about 40,000 rebate records…</p></main>
+
+<script>
+{
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const SUF={street:'st',str:'st',avenue:'ave',av:'ave',road:'rd',boulevard:'blvd',drive:'dr',lane:'ln',court:'ct',place:'pl',
+ highway:'hwy',route:'rt',rte:'rt',parkway:'pkwy',pky:'pkwy',terrace:'ter',north:'n',south:'s',east:'e',west:'w',suite:'ste',
+ plaza:'plz',square:'sq',circle:'cir',turnpike:'tpke',tpk:'tpke',mount:'mt',saint:'st',fort:'ft',township:'twp',
+ expressway:'expy',center:'ctr',centre:'ctr',building:'bldg',floor:'fl',number:'no',and:'and'};
+const norm=s=>String(s).toLowerCase().replace(/&/g,' and ').replace(/['’.]/g,'').replace(/[^a-z0-9]+/g,' ').trim()
+  .split(' ').map(w=>SUF[w]||w).join(' ');
+const isLit=t=>/light|led/i.test(t);
+const money=n=>'$'+n.toLocaleString('en-US',{minimumFractionDigits:n%1?2:0,maximumFractionDigits:2});
+const fmtD=d=>d?d.slice(5,7)+'/'+d.slice(8,10)+'/'+d.slice(0,4):'';
+let D,R=[],BY=new Map(),litOnly=false,shown=40,lastGroups=[];
+try{litOnly=localStorage.getItem('rl_lit')==='1'}catch(e){}
+
+fetch('data.json').then(r=>{if(!r.ok)throw new Error(r.status);return r.json()}).then(d=>{
+  D=d;
+  R=d.rows.map(r=>{const[src,ti,co,a1,a2,city,zip,ui,amt,date]=r;const tech=d.techs[ti];
+    return{src,tech,co,a1,a2,city,zip,util:d.utils[ui],amt,date,lit:isLit(tech),
+      key:norm(a1)+'|'+norm(city),hay:' '+norm([co,a1,a2,city,zip,tech].join(' '))+' ',na:norm(a1),nc:norm(co)}});
+  for(const r of R){let a=BY.get(r.key);if(!a)BY.set(r.key,a=[]);a.push(r)}
+  const dated=R.filter(r=>r.date).map(r=>r.date).sort();
+  $('asof').textContent=R.length.toLocaleString()+' records · dated thru '+fmtD(dated[dated.length-1]);
+  $('q').disabled=false;
+  let q='';try{q=localStorage.getItem('rl_q')||''}catch(e){}
+  $('q').value=q;setLit(litOnly);run();
+  if(!matchMedia('(pointer:coarse)').matches)$('q').focus();
+}).catch(e=>{$('out').innerHTML='<p class="empty">Could not load data.json ('+esc(e.message)+'). If you opened index.html straight from your files, it has to be served from a web host (GitHub Pages) instead.</p>'});
+
+function setLit(v){litOnly=v;$('lit').setAttribute('aria-pressed',v);try{localStorage.setItem('rl_lit',v?'1':'0')}catch(e){}}
+
+function run(){
+  const raw=$('q').value;try{localStorage.setItem('rl_q',raw)}catch(e){}
+  const nq=norm(raw),toks=nq.split(' ').filter(Boolean);
+  if(!toks.length){renderEmpty();return}
+  const hits=R.filter(r=>(!litOnly||r.lit)&&toks.every(t=>r.hay.includes(' '+t)));
+  const g=new Map();
+  for(const r of hits){let x=g.get(r.key);if(!x){x={rows:[],score:0};g.set(r.key,x)}x.rows.push(r)}
+  // when a building matches, show its full history (all programs), not just matching rows
+  for(const[k,x]of g){const all=BY.get(k).filter(r=>!litOnly||r.lit);x.rows=all.length>x.rows.length?all:x.rows;
+    const f=x.rows[0];x.score=(f.na.startsWith(nq)?2:0)+(x.rows.some(r=>r.nc.startsWith(nq))?1:0);
+    x.last=x.rows.reduce((m,r)=>r.date>m?r.date:m,'');x.rows.sort((a,b)=>(b.date||'9').localeCompare(a.date||'9'))}
+  lastGroups=[...g.values()].sort((a,b)=>b.score-a.score||b.last.localeCompare(a.last));
+  shown=40;render(toks);
+}
+function renderEmpty(){
+  $('count').textContent='';
+  const s=D.sources.map(x=>'<li>'+esc(x.label)+': '+x.count.toLocaleString()+' records <span style="opacity:.8">(tab “'+esc(x.tab)+'”)</span></li>').join('');
+  $('out').innerHTML='<div class="empty"><h2>Search by any part of the address or business</h2><ul>'+
+   '<li><b>530 james</b>, <b>1975 swarthmore</b> — street number plus a word of the street</li>'+
+   '<li><b>shoprite lakewood</b> — business plus town</li><li><b>08701</b> — everything in a ZIP</li></ul>'+
+   'Street, Avenue, Road, Route and similar are matched either spelled out or abbreviated.'+
+   '<div class="src">Source: '+esc(D.file)+'<ul>'+s+'</ul>Pay for Performance rows have no payment date in the sheet; their amount is incentives 1-3 added together.</div></div>';
+}
+function hl(text,toks){let h=esc(text);for(const t of toks){if(t.length<2)continue;
+  h=h.replace(new RegExp('(^|[^a-z0-9])('+t.replace(/[^a-z0-9]/g,'')+')','gi'),'$1<mark>$2</mark>')}return h}
+function card(x,toks){
+  const f=x.rows[0],cos=[...new Set(x.rows.map(r=>r.co))];
+  const lits=x.rows.filter(r=>r.lit),litDated=lits.filter(r=>r.date);
+  const stamp=lits.length?'<span class="stamp lit">Lighting rebate '+(litDated.length?'paid '+fmtD(litDated[0].date):'on file (no date)')+'</span>'
+                          :'<span class="stamp">No lighting rebate on file</span>';
+  const total=x.rows.reduce((s,r)=>s+r.amt,0);
+  const items=x.rows.map(r=>'<div class="it"><span class="t'+(r.lit?' l':'')+'">'+esc(r.tech)+'</span><span class="a">'+money(r.amt)+'</span>'+
+    '<span class="s">'+(r.date?fmtD(r.date):'No date listed')+' · '+esc(r.util||'Utility n/a')+' · '+esc(D.sources[r.src].label)+
+    (cos.length>1?' · '+esc(r.co):'')+(r.a2?' · '+esc(r.a2):'')+'</span></div>').join('');
+  const mq=encodeURIComponent(f.a1+', '+f.city+', NJ '+f.zip);
+  return '<details class="card"><summary><span class="addr">'+hl(f.a1,toks)+'</span>'+
+    '<span class="city">'+hl(f.city,toks)+', NJ '+hl(f.zip,toks)+'</span>'+
+    '<span class="co">'+cos.slice(0,3).map(c=>hl(c,toks)).join('; ')+(cos.length>3?' +'+(cos.length-3)+' more':'')+'</span>'+
+    stamp+'<span class="meta"><b>'+x.rows.length+'</b> rebate'+(x.rows.length>1?'s':'')+' · <b>'+money(total)+'</b> total'+
+    (x.last?' · latest '+fmtD(x.last):'')+' · tap for details</span></summary>'+
+    '<div class="list">'+items+'<a class="maps" href="https://www.google.com/maps/search/?api=1&query='+mq+'" target="_blank" rel="noopener">Open in Maps ›</a></div></details>';
+}
+function render(toks){
+  const n=lastGroups.length;
+  $('count').textContent=n.toLocaleString()+' building'+(n===1?'':'s');
+  if(!n){$('out').innerHTML='<div class="empty"><h2>No match'+(litOnly?' with lighting rebates':'')+'</h2>Try fewer words, just the street number and one street word, or the business name alone.'+(litOnly?' Or turn off “Lighting only”.':'')+'</div>';return}
+  $('out').innerHTML=lastGroups.slice(0,shown).map(x=>card(x,toks)).join('')+
+    (n>shown?'<button class="more" id="more" type="button">Show more ('+(n-shown).toLocaleString()+' left)</button>':'');
+  if(n===1)$('out').querySelector('details').open=true;
+  const m=$('more');if(m)m.onclick=()=>{shown+=40;render(toks)};
+}
+let tm;$('q').addEventListener('input',()=>{clearTimeout(tm);tm=setTimeout(run,160)});
+$('f').addEventListener('submit',e=>{e.preventDefault();clearTimeout(tm);run();$('q').blur()});
+$('lit').addEventListener('click',()=>{setLit(!litOnly);if(D)run()});
+}
+</script>
+</body>
+</html>
